@@ -25,7 +25,7 @@ namespace BodegApp.Backend.Controllers
         [HttpPost("register")]
         public async Task<IActionResult> Register(RegisterRequest request)
         {
-            try // 🚨 CORRECCIÓN: Bloque Try para capturar errores de DB y devolverlos
+            try 
             {
                 // Manejar el error de Email Duplicado
                 if (await _context.Users.AnyAsync(u => u.Email == request.Email))
@@ -37,13 +37,13 @@ namespace BodegApp.Backend.Controllers
                 {
                     Id = Guid.NewGuid(),
                     Email = request.Email,
-                    // Usamos el método estático directamente
                     PasswordHash = PasswordHelper.Hash(request.Password), 
                     Role = "User",
                     NombreEmpresa = request.NombreEmpresa,
                     TipoNegocio = request.TipoNegocio,
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow,
+                    // DefaultWarehouseId se deja null por ahora para evitar el ciclo
                 };
 
                 // 1. Crear la Bodega por defecto (Warehouse)
@@ -54,15 +54,24 @@ namespace BodegApp.Backend.Controllers
                     UserId = user.Id,
                     CreatedAt = DateTime.UtcNow
                 };
+                
+                // Agregar ambas entidades al contexto
+                _context.Users.Add(user);
                 _context.Warehouses.Add(warehouse);
 
-                // 2. Asignar la Bodega al usuario
+                // 2. PRIMER SAVE: Guarda el User y el Warehouse. (Rompe el ciclo)
+                await _context.SaveChangesAsync(); 
+
+                // 3. Asignar la Bodega al usuario (DefaultWarehouseId)
                 user.DefaultWarehouseId = warehouse.Id;
 
-                _context.Users.Add(user);
-                await _context.SaveChangesAsync(); // 🚨 El fallo (500) ocurre si falla la conexión aquí.
+                // 4. Actualizar la entidad User en el contexto
+                _context.Users.Update(user); 
+                
+                // 5. SEGUNDO SAVE: Guarda solo el cambio de DefaultWarehouseId.
+                await _context.SaveChangesAsync(); 
 
-                // Generar el token 
+                // Generar el token (Ahora sabemos que DefaultWarehouseId.Value existe)
                 var token = _jwt.GenerateToken(user.Id, user.Email, user.Role, user.DefaultWarehouseId.Value);
 
                 // Devolver el token junto con datos de usuario
@@ -73,9 +82,9 @@ namespace BodegApp.Backend.Controllers
                     NombreEmpresa = user.NombreEmpresa 
                 });
             }
-            catch (Exception ex) // 🚨 CORRECCIÓN: Bloque Catch para mostrar el error exacto.
+            catch (Exception ex)
             {
-                // Esto es para DEBUG. El detalle nos dirá si es un problema de SSL, firewall, o credenciales.
+                // Para depuración en Azure
                 return StatusCode(500, new 
                 { 
                     error = "Fallo CRÍTICO al comunicarse con la base de datos.", 
