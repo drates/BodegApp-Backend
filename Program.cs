@@ -7,27 +7,30 @@ using System.Text;
 using BodegApp.Backend.Services;
 using System.Security.Claims;
 using BodegApp.Backend.Models;
-using System.Text.Json;
+using System.Text.Json; 
 using Npgsql.EntityFrameworkCore.PostgreSQL;
+using Microsoft.Extensions.Logging; // 🚨 NECESARIO para usar ILogger
 
 var builder = WebApplication.CreateBuilder(args);
 
 
 // **********************************************
-// 💡 CORRECCIÓN 1: Configuración de CORS ABIERTA
+// 1. CONFIGURACIÓN DE CORS
 // **********************************************
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend",
         policy => policy
-            // 💡 Temporalmente abierto para probar en Azure
+            // 💡 Usaremos AllowAnyOrigin para pruebas en Azure App Service.
             .AllowAnyOrigin() 
             .AllowAnyHeader()
             .AllowAnyMethod());
 });
 
 
-// Add services to the container
+// **********************************************
+// 2. REGISTRO DE SERVICIOS
+// **********************************************
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -59,140 +62,133 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// **********************************************
-// 💡 CORRECCIÓN 2: Conexión a PostgreSQL
-// **********************************************
-// Usamos la cadena de conexión definida en appsettings.json como "PostgresConnection"
-var connectionString = builder.Configuration.GetConnectionString("PostgresConnection");
+// Registro de DB Context con Npgsql
 builder.Services.AddDbContext<InventoryContext>(options =>
-    options.UseNpgsql(connectionString)
-);
-
-builder.Services.AddControllers().AddJsonOptions(options =>
 {
-    options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
-    options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+    // Obtiene la cadena de conexión del Configuration (appsettings.json o Azure App Service Settings)
+    options.UseNpgsql(builder.Configuration.GetConnectionString("PostgresConnection"));
 });
 
-// Registrar el servicio JWT
+// Registro de servicios propios
 builder.Services.AddScoped<JwtService>();
 
-// **********************************************
-// 💡 CORRECCIÓN 3: Configuración de JWT (Leyendo la clave desde la configuración)
-// **********************************************
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        // Esto previene que Newtonsoft.Json use referencias cíclicas si accidentalmente las creamos.
+        options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+        options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
+    });
+
+// Configuración de JWT
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
-            ValidateAudience = false,
+            ValidateAudience = false, // Lo dejamos en false para simplificar
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
             ValidIssuer = builder.Configuration["Jwt:Issuer"],
-            // 💡 ESTO ES LO CRÍTICO: Leer la clave desde la configuración
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!)),
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
         };
     });
 
 builder.Services.AddAuthorization();
 
 
+// **********************************************
+// 3. MIDDLEWARE
+// **********************************************
 var app = builder.Build();
 
-// **********************************************
-// 💡 CORRECCIÓN 4: Inicialización del Superadmin (Leyendo credenciales)
-// **********************************************
-using (var scope = app.Services.CreateScope())
-{
-    var services = scope.ServiceProvider;
-    var context = services.GetRequiredService<InventoryContext>();
-    
-    // Ejecutar migraciones
-    context.Database.Migrate();
-
-    // 💡 Leer las credenciales del Superadmin desde la configuración
-    var superadminEmail = builder.Configuration["Superadmin:Email"];
-    var superadminPassword = builder.Configuration["Superadmin:Password"];
-
-    // Si las credenciales no están definidas, no se puede crear el usuario.
-    if (string.IsNullOrEmpty(superadminEmail) || string.IsNullOrEmpty(superadminPassword))
-    {
-        // Esto puede ocurrir en entornos donde se olvidan de inyectar las variables
-        Console.WriteLine("⚠️ ADVERTENCIA: Credenciales de Superadmin faltantes en la configuración. No se creará el usuario inicial.");
-    }
-    else
-    {
-        EnsureSuperadminExists(context, superadminEmail, superadminPassword);
-    }
-}
-
-
-// Middlewares
 app.UseCors("AllowFrontend");
 
-
-// Enable Swagger in development
+// Enable Swagger in development (se recomienda desactivarlo en producción en App Service)
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-//app.UseHttpsRedirection();
+// app.UseHttpsRedirection(); // Se deshabilita por defecto en Azure App Service
 
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
 
-app.Run();
-
 
 // **********************************************
-// Método auxiliar para crear Superadmin (sin cambios lógicos, solo refactorizado)
+// 4. LÓGICA DE SEEDING DE DATOS (CRÍTICA)
 // **********************************************
-void EnsureSuperadminExists(InventoryContext context, string superadminEmail, string superadminPassword)
+// 🚨 CORRECCIÓN CRÍTICA: Se agrega un bloque try-catch para evitar que la aplicación
+// falle al iniciar si hay un problema de conexión o seeding.
+using (var scope = app.Services.CreateScope())
 {
-    // Solo si el usuario no existe.
-    if (!context.Users.Any(u => u.Email == superadminEmail))
+    var serviceProvider = scope.ServiceProvider;
+    var context = serviceProvider.GetRequiredService<InventoryContext>();
+    // Creamos un logger para registrar el error si la operación falla
+    var logger = serviceProvider.GetRequiredService<ILogger<Program>>(); 
+    var superadminEmail = builder.Configuration["Superadmin:Email"]!;
+
+    try 
     {
-        var adminId = Guid.NewGuid();
-        var warehouseId = Guid.NewGuid();
-
-        // 1. Crear el Superadmin
-        var superadmin = new User
+        // ⚠️ La aplicación se cae si esta verificación falla (ej: No hay conexión a la DB)
+        if (!context.Users.Any(u => u.Role == "Superadmin"))
         {
-            Id = adminId, // Asignación directa de Guid
-            Email = superadminEmail,
-            PasswordHash = PasswordHelper.Hash(superadminPassword),
-            Role = "Superadmin",
-            // Campos NOT NULL obligatorios para la base de datos
-            NombreEmpresa = "BodegApp Global Admin", 
-            TipoNegocio = "Administracion Central",
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
-        };
-        context.Users.Add(superadmin);
-        context.SaveChanges();
+            logger.LogInformation($"Iniciando Seeding: Creando Superadmin '{superadminEmail}'...");
+            
+            // Obtener credenciales de appsettings.json
+            var superadminPassword = builder.Configuration["Superadmin:Password"]!;
 
-        // 2. Crear la Bodega Principal y vincularla al Superadmin
-        var warehouse = new Warehouse
-        {
-            Id = warehouseId, // Asignación directa de Guid
-            Name = "Bodega Central Admin",
-            UserId = adminId, // Asignación directa de Guid
-            CreatedAt = DateTime.UtcNow
-        };
-        context.Warehouses.Add(warehouse);
-        context.SaveChanges();
+            var adminId = Guid.NewGuid();
+            var warehouseId = Guid.NewGuid();
 
-        // 3. Asignar la bodega al Superadmin
-        superadmin.DefaultWarehouseId = warehouseId; // Asignación directa de Guid
-        context.Users.Update(superadmin);
-        context.SaveChanges(); // Persistir la asignación de la Bodega por defecto
-        
-        Console.WriteLine($"✅ Superadmin '{superadminEmail}' creado con éxito y Bodega inicial asignada.");
+            // 1. Crear el Superadmin
+            var superadmin = new User
+            {
+                Id = adminId,
+                Email = superadminEmail,
+                PasswordHash = PasswordHelper.Hash(superadminPassword),
+                Role = "Superadmin",
+                NombreEmpresa = "BodegApp Global Admin", 
+                TipoNegocio = "Administracion Central",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            context.Users.Add(superadmin);
+            context.SaveChanges();
+
+            // 2. Crear la Bodega Principal y vincularla al Superadmin
+            var warehouse = new Warehouse
+            {
+                Id = warehouseId,
+                Name = "Bodega Central Admin",
+                UserId = adminId,
+                CreatedAt = DateTime.UtcNow
+            };
+            context.Warehouses.Add(warehouse);
+            context.SaveChanges();
+
+            // 3. Asignar la bodega al Superadmin
+            superadmin.DefaultWarehouseId = warehouseId;
+            context.Users.Update(superadmin);
+            context.SaveChanges();
+            
+            logger.LogInformation($"✅ Superadmin '{superadminEmail}' creado con éxito y Bodega inicial asignada.");
+        } else {
+             logger.LogInformation($"✅ Superadmin '{superadminEmail}' ya existe. Se omite el seeding.");
+        }
+    }
+    catch (Exception ex)
+    {
+        // ⚠️ Si la conexión o el seeding falla, registramos el error pero NO hacemos throw, 
+        // permitiendo que el host continúe su ejecución. Esto es lo que soluciona el 500.30.
+        logger.LogError(ex, "⚠️ FATAL: Ocurrió un error en el Seeding de datos. Revise la cadena de conexión o firewall de la DB.");
     }
 }
+
+
+app.Run();
