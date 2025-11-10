@@ -25,61 +25,70 @@ namespace BodegApp.Backend.Controllers
         [HttpPost("register")]
         public async Task<IActionResult> Register(RegisterRequest request)
         {
-            // Manejar el error de Email Duplicado
-            if (await _context.Users.AnyAsync(u => u.Email == request.Email))
+            try // 🚨 CORRECCIÓN: Bloque Try para capturar errores de DB y devolverlos
             {
-                return Conflict(new { message = "El correo electrónico ya está registrado. Por favor, inicia sesión o usa otro correo." });
+                // Manejar el error de Email Duplicado
+                if (await _context.Users.AnyAsync(u => u.Email == request.Email))
+                {
+                    return Conflict(new { message = "El correo electrónico ya está registrado. Por favor, inicia sesión o usa otro correo." });
+                }
+
+                var user = new User
+                {
+                    Id = Guid.NewGuid(),
+                    Email = request.Email,
+                    // Usamos el método estático directamente
+                    PasswordHash = PasswordHelper.Hash(request.Password), 
+                    Role = "User",
+                    NombreEmpresa = request.NombreEmpresa,
+                    TipoNegocio = request.TipoNegocio,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow,
+                };
+
+                // 1. Crear la Bodega por defecto (Warehouse)
+                var warehouse = new Warehouse
+                {
+                    Id = Guid.NewGuid(),
+                    Name = $"Bodega Principal - {request.NombreEmpresa}",
+                    UserId = user.Id,
+                    CreatedAt = DateTime.UtcNow
+                };
+                _context.Warehouses.Add(warehouse);
+
+                // 2. Asignar la Bodega al usuario
+                user.DefaultWarehouseId = warehouse.Id;
+
+                _context.Users.Add(user);
+                await _context.SaveChangesAsync(); // 🚨 El fallo (500) ocurre si falla la conexión aquí.
+
+                // Generar el token 
+                var token = _jwt.GenerateToken(user.Id, user.Email, user.Role, user.DefaultWarehouseId.Value);
+
+                // Devolver el token junto con datos de usuario
+                return Ok(new 
+                { 
+                    Token = token, 
+                    Email = user.Email, 
+                    NombreEmpresa = user.NombreEmpresa 
+                });
             }
-
-            var user = new User
+            catch (Exception ex) // 🚨 CORRECCIÓN: Bloque Catch para mostrar el error exacto.
             {
-                Id = Guid.NewGuid(),
-                Email = request.Email,
-                // Usamos el método estático directamente
-                PasswordHash = PasswordHelper.Hash(request.Password), 
-                Role = "User",
-                NombreEmpresa = request.NombreEmpresa,
-                TipoNegocio = request.TipoNegocio,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
-            };
-
-            _context.Users.Add(user);
-            await _context.SaveChangesAsync();
-
-            // 1. Crear la Bodega Principal por defecto
-            var warehouse = new Warehouse
-            {
-                Id = Guid.NewGuid(),
-                Name = "Bodega Principal",
-                UserId = user.Id,
-                CreatedAt = DateTime.UtcNow
-            };
-
-            _context.Warehouses.Add(warehouse);
-            await _context.SaveChangesAsync();
-
-            user.DefaultWarehouseId = warehouse.Id;
-            _context.Users.Update(user);
-            await _context.SaveChangesAsync();
-
-            // 2. Generar y devolver el token con datos de usuario
-            var token = _jwt.GenerateToken(user.Id, user.Email, user.Role, user.DefaultWarehouseId.Value); 
-            
-            // Devolver formato completo para login automático en el frontend
-            return Ok(new 
-            { 
-                Token = token, 
-                Email = user.Email, 
-                NombreEmpresa = user.NombreEmpresa 
-            });
+                // Esto es para DEBUG. El detalle nos dirá si es un problema de SSL, firewall, o credenciales.
+                return StatusCode(500, new 
+                { 
+                    error = "Fallo CRÍTICO al comunicarse con la base de datos.", 
+                    details = ex.Message 
+                });
+            }
         }
 
         [HttpPost("login")]
         public async Task<IActionResult> Login(LoginRequest request)
         {
-            var user = await _context.Users
-                                     .FirstOrDefaultAsync(u => u.Email == request.Email);
+            // Buscar el usuario por email
+            var user = await _context.Users.SingleOrDefaultAsync(u => u.Email == request.Email);
 
             if (user == null || user.DefaultWarehouseId == null)
                 return Unauthorized("Credenciales inválidas.");
