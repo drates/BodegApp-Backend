@@ -94,31 +94,43 @@ namespace BodegApp.Backend.Controllers
         }
 
         [HttpPost("login")]
-        public async Task<IActionResult> Login(LoginRequest request)
-        {
-            // Buscar el usuario por email
-            var user = await _context.Users.SingleOrDefaultAsync(u => u.Email == request.Email);
+public async Task<IActionResult> Login(LoginRequest request)
+{
+    try // 🚨 Añadir Try
+    {
+        // Buscar el usuario por email
+        var user = await _context.Users.SingleOrDefaultAsync(u => u.Email == request.Email);
 
-            if (user == null || user.DefaultWarehouseId == null)
-                return Unauthorized("Credenciales inválidas.");
+        if (user == null || user.DefaultWarehouseId == null)
+            return Unauthorized("Credenciales inválidas.");
 
-            // Usamos Verify() para comparar la contraseña de entrada con el hash de la base de datos.
-            bool isPasswordValid = PasswordHelper.Verify(request.Password, user.PasswordHash);
-            
-            if (!isPasswordValid)
-                return Unauthorized("Credenciales inválidas.");
+        // Usamos Verify() para comparar la contraseña de entrada con el hash de la base de datos.
+        bool isPasswordValid = PasswordHelper.Verify(request.Password, user.PasswordHash);
+        
+        if (!isPasswordValid)
+            return Unauthorized("Credenciales inválidas.");
 
-            // Usamos el ID de la Bodega del usuario
-            var token = _jwt.GenerateToken(user.Id, user.Email, user.Role, user.DefaultWarehouseId.Value);
+        // Usamos el ID de la Bodega del usuario
+        var token = _jwt.GenerateToken(user.Id, user.Email, user.Role, user.DefaultWarehouseId.Value);
 
-            // Devolver el token junto con datos de usuario
-            return Ok(new 
-            { 
-                Token = token, 
-                Email = user.Email, 
-                NombreEmpresa = user.NombreEmpresa 
-            });
-        }
+        // Devolver el token junto con datos de usuario
+        return Ok(new 
+        { 
+            Token = token, 
+            Email = user.Email, 
+            NombreEmpresa = user.NombreEmpresa 
+        });
+    }
+    catch (Exception ex) // 🚨 Añadir Catch para mostrar el error real.
+    {
+        // Esto es para DEBUG. El detalle nos dirá la razón del fallo.
+        return StatusCode(500, new 
+        { 
+            error = "Fallo CRÍTICO en el proceso de Login.", 
+            details = ex.Message 
+        });
+    }
+}
 
         [HttpGet("me")]
         [Authorize] 
