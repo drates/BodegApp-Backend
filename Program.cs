@@ -106,11 +106,11 @@ var app = builder.Build();
 app.UseCors("AllowFrontend");
 
 // Enable Swagger in development (se recomienda desactivarlo en producción en App Service)
-if (app.Environment.IsDevelopment())
-{
+//if (app.Environment.IsDevelopment())
+//{
     app.UseSwagger();
     app.UseSwaggerUI();
-}
+//}
 
 // app.UseHttpsRedirection(); // Se deshabilita por defecto en Azure App Service
 
