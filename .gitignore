@@ -1,0 +1,43 @@
+# Arquitectura Visual Studio / .NET Core
+##########################################
+
+# Carpeta de compilación de proyecto
+[Bb]in/
+[Oo]bj/
+
+# Paquetes NuGet
+.nuget/
+**/[Rr]elease/
+**/[Dd]ebug/
+
+# Archivos de usuario y temporales
+*.user
+*.suo
+*.sln.docstates
+*.vshost.*
+*.vspscc
+*.vssscc
+**/packages/
+.vs/
+LICENSE.txt
+
+# Base de datos local (si usas SQLite o archivos de DB locales)
+*.db
+*.sqlite
+*.sqlite3
+
+# 🚨 SEGURIDAD CRÍTICA: Ignorar Archivos de Configuración Sensibles
+##########################################
+
+# Archivos de configuración de desarrollo local
+# Estos contienen la cadena de conexión local, el secret JWT de desarrollo, etc.
+appsettings.Development.json
+appsettings.Local.json
+.env
+
+# User Secrets (método de secrets local de .NET)
+**/secrets.json
+
+# Keys o Certificados
+*.pfx
+*.snk

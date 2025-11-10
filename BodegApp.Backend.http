@@ -1,0 +1,6 @@
+@BodegApp.Backend_HostAddress = http://localhost:5122
+
+GET {{BodegApp.Backend_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
