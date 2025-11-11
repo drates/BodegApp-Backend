@@ -10,7 +10,8 @@ using Microsoft.AspNetCore.Authorization;
 namespace BodegApp.Backend.Controllers
 {
     [ApiController]
-    [Route("auth")]
+    // 🟢 CORRECCIÓN APLICADA: Usa 'api/[controller]' para coincidir con la SWA.
+    [Route("api/[controller]")] // Esto resulta en la ruta base: /api/auth
     public class AuthController : ControllerBase
     {
         private readonly InventoryContext _context;
@@ -23,6 +24,7 @@ namespace BodegApp.Backend.Controllers
         }
 
         [HttpPost("register")]
+        // La ruta final de este método será: /api/auth/register
         public async Task<IActionResult> Register(RegisterRequest request)
         {
             try 
@@ -94,46 +96,48 @@ namespace BodegApp.Backend.Controllers
         }
 
         [HttpPost("login")]
-public async Task<IActionResult> Login(LoginRequest request)
-{
-    try // 🚨 Añadir Try
-    {
-        // Buscar el usuario por email
-        var user = await _context.Users.SingleOrDefaultAsync(u => u.Email == request.Email);
+        // La ruta final de este método será: /api/auth/login
+        public async Task<IActionResult> Login(LoginRequest request)
+        {
+            try 
+            {
+                // Buscar el usuario por email
+                var user = await _context.Users.SingleOrDefaultAsync(u => u.Email == request.Email);
 
-        if (user == null || user.DefaultWarehouseId == null)
-            return Unauthorized("Credenciales inválidas.");
+                if (user == null || user.DefaultWarehouseId == null)
+                    return Unauthorized("Credenciales inválidas.");
 
-        // Usamos Verify() para comparar la contraseña de entrada con el hash de la base de datos.
-        bool isPasswordValid = PasswordHelper.Verify(request.Password, user.PasswordHash);
-        
-        if (!isPasswordValid)
-            return Unauthorized("Credenciales inválidas.");
+                // Usamos Verify() para comparar la contraseña de entrada con el hash de la base de datos.
+                bool isPasswordValid = PasswordHelper.Verify(request.Password, user.PasswordHash);
+                
+                if (!isPasswordValid)
+                    return Unauthorized("Credenciales inválidas.");
 
-        // Usamos el ID de la Bodega del usuario
-        var token = _jwt.GenerateToken(user.Id, user.Email, user.Role, user.DefaultWarehouseId.Value);
+                // Usamos el ID de la Bodega del usuario
+                var token = _jwt.GenerateToken(user.Id, user.Email, user.Role, user.DefaultWarehouseId.Value);
 
-        // Devolver el token junto con datos de usuario
-        return Ok(new 
-        { 
-            Token = token, 
-            Email = user.Email, 
-            NombreEmpresa = user.NombreEmpresa 
-        });
-    }
-    catch (Exception ex) // 🚨 Añadir Catch para mostrar el error real.
-    {
-        // Esto es para DEBUG. El detalle nos dirá la razón del fallo.
-        return StatusCode(500, new 
-        { 
-            error = "Fallo CRÍTICO en el proceso de Login.", 
-            details = ex.Message 
-        });
-    }
-}
+                // Devolver el token junto con datos de usuario
+                return Ok(new 
+                { 
+                    Token = token, 
+                    Email = user.Email, 
+                    NombreEmpresa = user.NombreEmpresa 
+                });
+            }
+            catch (Exception ex)
+            {
+                // Esto es para DEBUG. El detalle nos dirá la razón del fallo.
+                return StatusCode(500, new 
+                { 
+                    error = "Fallo CRÍTICO en el proceso de Login.", 
+                    details = ex.Message 
+                });
+            }
+        }
 
         [HttpGet("me")]
         [Authorize] 
+        // La ruta final de este método será: /api/auth/me
         public IActionResult Me()
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "N/A";
