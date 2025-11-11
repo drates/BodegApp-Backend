@@ -8,7 +8,8 @@ using System;
 using BodegApp.Backend.DTOs;
 
 [ApiController]
-[Route("stockmovements")]
+[Route("api/[controller]")]
+
 public class StockMovementsController : ControllerBase
 {
     private readonly InventoryContext _context;

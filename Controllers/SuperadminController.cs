@@ -9,8 +9,7 @@ using System.Security.Claims;
 namespace BodegApp.Backend.Controllers
 {
     [ApiController]
-    [Route("superadmin")]
-    [Authorize(Roles = "Superadmin")]
+    [Route("api/[controller]")]    [Authorize(Roles = "Superadmin")]
     public class SuperadminController : ControllerBase
     {
         private readonly InventoryContext _context;

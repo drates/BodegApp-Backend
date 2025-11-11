@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 [Authorize]
 [ApiController]
-[Route("ingreso")]
+[Route("api/[controller]")]
 public class IngresoController : ControllerBase
 {
     private readonly InventoryContext _context;

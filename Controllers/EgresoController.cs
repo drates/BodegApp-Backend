@@ -12,7 +12,7 @@ namespace BodegApp.Backend.Controllers
 {
     [Authorize]
     [ApiController]
-    [Route("egreso")]
+    [Route("api/[controller]")]
     public class EgresoController : ControllerBase
     {
         private readonly InventoryContext _context;

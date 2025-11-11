@@ -11,7 +11,7 @@ namespace BodegApp.Backend.Controllers
 {
     [Authorize]
     [ApiController]
-    [Route("itembatches")]
+    [Route("api/[controller]")]
     public class ItemBatchController : ControllerBase
     {
         private readonly InventoryContext _context;
