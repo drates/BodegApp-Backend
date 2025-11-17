@@ -36,7 +36,7 @@ namespace BodegApp.Backend.Services
                 issuer: _issuer,
                 audience: null,
                 claims: claims,
-                expires: DateTime.UtcNow.AddDays(7),
+                expires: DateTime.UtcNow.AddMinutes(30),
                 signingCredentials: creds
             );
 
