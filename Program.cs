@@ -17,15 +17,20 @@ var builder = WebApplication.CreateBuilder(args);
 // **********************************************
 // 1. CONFIGURACIÓN DE CORS
 // **********************************************
+var allowedOrigins = builder.Environment.IsDevelopment()
+    ? new[] { "http://localhost:5173", "https://icy-glacier-05dd50e10.3.azurestaticapps.net" }
+    : new[] { "https://icy-glacier-05dd50e10.3.azurestaticapps.net" };
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowFrontend",
-        policy => policy
-            // 💡 Usaremos AllowAnyOrigin para pruebas en Azure App Service.
-            .AllowAnyOrigin() 
-            .AllowAnyHeader()
-            .AllowAnyMethod());
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy.WithOrigins(allowedOrigins)
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
 });
+
 
 
 // **********************************************
