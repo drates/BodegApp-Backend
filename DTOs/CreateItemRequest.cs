@@ -10,7 +10,6 @@ namespace BodegApp.Backend.DTOs
         [StringLength(50)]
         public string ProductCode { get; set; } = string.Empty;
 
-        [Required(ErrorMessage = "Este producto no existe en el inventario. Debes ingresar un nombre.")]
         [StringLength(100)]
         public string Name { get; set; } = string.Empty;
 
