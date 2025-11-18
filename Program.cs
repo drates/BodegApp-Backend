@@ -18,8 +18,15 @@ var builder = WebApplication.CreateBuilder(args);
 // 1. CONFIGURACIÓN DE CORS
 // **********************************************
 var allowedOrigins = builder.Environment.IsDevelopment()
-    ? new[] { "http://localhost:5173", "https://icy-glacier-05dd50e10.3.azurestaticapps.net" }
-    : new[] { "https://icy-glacier-05dd50e10.3.azurestaticapps.net" };
+    ? new[] { 
+        "http://localhost:5173", // 1. Dev Local (Vite)
+        "https://icy-glacier-05dd50e10.3.azurestaticapps.net", // 2. Staging Azure SWA
+        "https://www.bodegafeliz.cl" // 3. Dominio Custom (Recomendado incluir en dev también)
+    }
+    : new[] { 
+        "https://icy-glacier-05dd50e10.3.azurestaticapps.net", // 2. Staging Azure SWA
+        "https://www.bodegafeliz.cl" // 🚨 CRÍTICO: Dominio Custom de Producción
+    };
 
 builder.Services.AddCors(options =>
 {
@@ -27,7 +34,8 @@ builder.Services.AddCors(options =>
     {
         policy.WithOrigins(allowedOrigins)
               .AllowAnyHeader()
-              .AllowAnyMethod();
+              .AllowAnyMethod()
+              .AllowCredentials(); // Agrega esto si usas JWT (Bearer Token)
     });
 });
 
